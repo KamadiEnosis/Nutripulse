@@ -62,7 +62,7 @@ const MEAL_PLANS = {
     theme: "Low Sodium, High Potassium",
     color: C.jade,
     icon: "❤️",
-    note: "Reduce salt in all preparations. Focus on potassium-rich foods like bananas, avocado, and arrow roots. DASH diet principles apply — generous vegetables, lean proteins, and limited processed foods.",
+    note: "Focus on potassium-rich foods like bananas, avocado, and arrow roots. DASH diet principles apply — generous vegetables, lean proteins, and limited processed foods.",
     meals: {
       Monday: { breakfast: "Oatmeal with banana + low-fat milk (no added salt)", lunch: "Ugali + sukuma wiki (no salt) + grilled fish", dinner: "Arrow roots + bean soup + tomato salad", snack: "Watermelon cubes" },
       Tuesday: { breakfast: "Millet porridge + avocado (½)", lunch: "Brown rice + managu + boiled chicken (skinless)", dinner: "Sweet potatoes + lentil soup (low sodium)", snack: "Banana" },
@@ -107,7 +107,7 @@ const MEAL_PLANS = {
     theme: "Balanced & Wholesome",
     color: C.lime,
     icon: "🌿",
-    note: "Focus on variety and balance. Include a mix of whole grains, legumes, vegetables, and lean proteins daily. Local foods are nutrient-dense and affordable — you're already winning.",
+    note: "Focus on variety and balance. Include a mix of whole grains, legumes, vegetables, Meat, eggs and lean proteins daily. Local foods are nutrient-dense and affordable — you're already winning.",
     meals: {
       Monday: { breakfast: "Millet porridge + boiled egg + avocado", lunch: "Ugali + sukuma wiki + grilled tilapia", dinner: "Arrow roots + njahi + managu stir-fry", snack: "Banana + groundnuts" },
       Tuesday: { breakfast: "Oatmeal + banana + black tea", lunch: "Githeri + kachumbari + plain yoghurt", dinner: "Sweet potato + lentil soup + sukuma wiki", snack: "Pawpaw" },
@@ -167,7 +167,6 @@ const okSty = { background: "#edfaf3", border: "1px solid #a8e6c4", borderRadius
 
 // ─── NAVBAR ──────────────────────────────────────────────────────────────
 function Navbar({ page, setPage, user, onLogout }) {
-  const [mob, setMob] = useState(false);
   const navItems = ["Dashboard", "Meal Plans", "Food Database", "Chat", "Community", "Tracking"];
   return (
     <nav style={{ background: C.forest, position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 24px rgba(0,0,0,0.4)" }}>
@@ -431,7 +430,7 @@ function FoodDatabase() {
   );
 }
 
-// ─── CHATBOT (Claude API Powered) ────────────────────────────────────────
+// ─── NUTRI-CHATBOT ────────────────────────────────────────
 function ChatBot() {
   const [messages, setMessages] = useState([
     { role: "assistant", content: "Jambo! 👋 I'm **NutriBot**, your AI-powered nutrition assistant trained on East African dietary contexts.\n\nI can help you with:\n• Diabetes, hypertension, and oncology diets\n• Local Kenyan food recommendations\n• Personalised meal planning\n• Weight management tips\n\nAsk me anything about nutrition!" }
@@ -741,7 +740,7 @@ function Tracking({ user }) {
             <h3 style={{ margin: "0 0 22px", color: C.forest, fontWeight: 800, fontSize: 18 }}>📏 Biometric Log</h3>
             {[
               { label: "⚖️ Weight (kg)", key: "weight", unit: "kg" },
-              { label: "🩸 Blood Sugar (mg/dL)", key: "sugar", unit: "mg/dL" },
+              { label: "🩸 Blood Sugar (mg/dL)", key: "sugar", unit: "mg/dL " },
               { label: "❤️ Blood Pressure", key: "bp", unit: "mmHg" },
             ].map(b => (
               <div key={b.key} style={{ marginBottom: 16 }}>
@@ -1073,7 +1072,7 @@ export default function App() {
       <Navbar page={page} setPage={setPage} user={user} onLogout={handleLogout} />
       <main>{pageMap[page]}</main>
       <footer style={{ textAlign: "center", padding: "28px", color: "#bbb", fontSize: 13, borderTop: `1px solid ${C.mist}`, marginTop: 48 }}>
-        NutriPulse © 2025 · AI-Powered Nutrition for East Africa · Built with ❤️ for community health
+        NutriPulse © 2026 · Trusted AI-Powered Nutrition for East Africa · Built with ❤️ for community health
       </footer>
     </div>
   );
