@@ -581,7 +581,7 @@ function AuthScreen({ onAuth }) {
     if (password.length<6) { setError("Password must be at least 6 characters."); return; }
     if (password!==confirm) { setError("Passwords do not match."); return; }
     setLoading(true);
-    const { data, error:err } = await supabase.auth.signUp({ email, password, options:{ data:{ name, phone, condition:"Healthy", height:1.65, weight:"65" } } });
+    const { error:err } = await supabase.auth.signUp({ email, password, options:{ data:{ name, phone, condition:"Healthy", height:1.65, weight:"65" } } });
     if (err) { setError(err.message||"Signup failed. Please try again."); }
     else { setSuccess("Account created! Setting up your profile..."); await sendNotification("signup", { name, email, phone }); setTimeout(() => onAuth({ name, email, phone, condition:"Healthy", height:1.65, weight:"65" }, true), 800); }
     setLoading(false);
