@@ -117,12 +117,37 @@ const MP = {
   }},
 };
 
-async function callNutriBot(messages) {
+async function callNutriBot(messages, userProfile, plan) {
   try {
-    const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ messages }) });
+    const res = await fetch("/api/chat", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ messages, userProfile: userProfile || null, plan: plan || "free" }),
+    });
+    if (res.status === 429) {
+      const data = await res.json();
+      return data.reply || "Message limit reached. Please upgrade to continue.";
+    }
     const data = await res.json();
     return data.reply || "I am having trouble connecting. Please try again.";
-  } catch { return "Connection issue. Please check your internet and try again."; }
+  } catch { return "Pole sana! Connection issue. Please check your internet and try again. 🌿"; }
+}
+
+// M-Pesa STK Push helper
+async function initiateMpesaPayment(phone, amount, planName, userId) {
+  const res = await fetch("/api/mpesa", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ action:"initiate", phone, amount, planName, userId }),
+  });
+  return await res.json();
+}
+
+async function checkMpesaStatus(checkoutRequestId) {
+  const res = await fetch("/api/mpesa", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ action:"status", checkoutRequestId }),
+  });
+  return await res.json();
 }
 
 async function sendNotification(type, user) {
@@ -135,58 +160,168 @@ const bPri = { padding:"13px 24px", background:"linear-gradient(135deg, #1e5631,
 const eSty = { background:"#fff0ed", border:"1px solid #f5c6bc", borderRadius:10, padding:"10px 14px", fontSize:13, color:"#c0392b" };
 const okSty = { background:"#edfaf3", border:"1px solid #a8e6c4", borderRadius:10, padding:"10px 14px", fontSize:13, color:"#27ae60" };
 
+function MpesaPaymentModal({ plan, user, onSuccess, onClose }) {
+  const [phone, setPhone] = useState(user?.phone || "");
+  const [stage, setStage] = useState("input");
+  const [error, setError] = useState("");
+  const [transactionId, setTransactionId] = useState(null);
+  const [pollCount, setPollCount] = useState(0);
+  const pollRef = useRef(null);
+
+  const planConfig = PLANS[plan];
+  const amountKES = planConfig?.priceKES || 0;
+
+  const handlePay = async () => {
+    setError("");
+    if (!phone.trim()) { setError("Please enter your M-Pesa phone number."); return; }
+    setStage("sending");
+    const result = await initiateMpesaPayment(phone, amountKES, planConfig.name, user?.email || "guest");
+    if (result.success) {
+      setStage("waiting");
+      startPolling(result.checkoutRequestId);
+    } else {
+      setError(result.error || "Failed to send payment request. Please try again.");
+      setStage("input");
+    }
+  };
+
+  const startPolling = (cid) => {
+    let count = 0;
+    pollRef.current = setInterval(async () => {
+      count++;
+      setPollCount(count);
+      if (count > 12) {
+        clearInterval(pollRef.current);
+        setError("Payment request timed out. Please try again.");
+        setStage("error");
+        return;
+      }
+      const status = await checkMpesaStatus(cid);
+      if (status.status === "completed") {
+        clearInterval(pollRef.current);
+        setTransactionId(status.transactionId || cid);
+        setStage("success");
+        await sendNotification("subscription", { ...user, plan: planConfig.name, amount: `KES ${amountKES}`, transactionId: status.transactionId });
+        setTimeout(() => onSuccess(plan), 3000);
+      } else if (status.status === "cancelled" || status.status === "failed") {
+        clearInterval(pollRef.current);
+        setError(status.message || "Payment failed. Please try again.");
+        setStage("error");
+      }
+    }, 5000);
+  };
+
+  useEffect(() => () => clearInterval(pollRef.current), []);
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div style={{ background:"#fff", borderRadius:22, padding:"36px 32px", maxWidth:420, width:"100%", boxShadow:"0 32px 80px rgba(0,0,0,0.4)", position:"relative" }}>
+        <button onClick={onClose} disabled={stage==="waiting"||stage==="sending"} style={{ position:"absolute", top:16, right:16, background:"none", border:"none", fontSize:22, cursor:"pointer", color:"#bbb" }}>x</button>
+        <div style={{ textAlign:"center", marginBottom:24 }}>
+          <div style={{ fontSize:40, marginBottom:8 }}>📱</div>
+          <h2 style={{ color:C.forest, fontFamily:"Georgia,serif", fontSize:22, margin:"0 0 6px", fontWeight:800 }}>Pay with M-Pesa</h2>
+          <div style={{ background:C.mist, borderRadius:10, padding:"10px 16px", display:"inline-block" }}>
+            <span style={{ color:C.forest, fontWeight:800, fontSize:18 }}>KES {amountKES?.toLocaleString()}</span>
+            <span style={{ color:"#888", fontSize:13 }}>/{planConfig?.period}</span>
+            <span style={{ color:C.jade, fontWeight:700, fontSize:13, marginLeft:8 }}>· {planConfig?.name} Plan</span>
+          </div>
+        </div>
+        {(stage==="input"||stage==="sending") && (
+          <div>
+            <label style={{ ...lSty, fontSize:14 }}>M-Pesa Phone Number</label>
+            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="07XX XXX XXX or +254 7XX XXX XXX" type="tel" disabled={stage==="sending"} style={{ ...iSty, fontSize:16, fontWeight:600, marginBottom:6, border:"2px solid "+C.lime }} />
+            <div style={{ color:"#aaa", fontSize:12, marginBottom:20 }}>You will receive an STK push prompt on this number. Enter your M-Pesa PIN to complete.</div>
+            {error && <div style={{ ...eSty, marginBottom:14 }}>Warning: {error}</div>}
+            <button onClick={handlePay} disabled={stage==="sending"} style={{ ...bPri, width:"100%", textAlign:"center", fontSize:16, padding:"15px", background:stage==="sending"?"#aaa":"linear-gradient(135deg, #4caf50, #2e7d32)" }}>
+              {stage==="sending" ? "Sending request..." : "Pay with M-Pesa"}
+            </button>
+            <div style={{ textAlign:"center", marginTop:14, color:"#bbb", fontSize:11 }}>Secured by Safaricom Daraja API</div>
+          </div>
+        )}
+        {stage==="waiting" && (
+          <div style={{ textAlign:"center" }}>
+            <div style={{ fontSize:52, marginBottom:14 }}>⏳</div>
+            <h3 style={{ color:C.forest, fontWeight:800, fontSize:17, marginBottom:8 }}>Check your phone!</h3>
+            <p style={{ color:"#555", fontSize:14, lineHeight:1.7, marginBottom:16 }}>A payment request has been sent to <strong>{phone}</strong>. Enter your M-Pesa PIN to complete the payment.</p>
+            <div style={{ background:C.mist, borderRadius:12, padding:14 }}>
+              <div style={{ color:C.jade, fontWeight:700, fontSize:13 }}>Waiting for confirmation... ({pollCount * 5}s)</div>
+              <div style={{ height:4, background:"rgba(0,0,0,0.1)", borderRadius:2, marginTop:8, overflow:"hidden" }}>
+                <div style={{ height:"100%", width:Math.min(pollCount*8, 100)+"%", background:C.jade, borderRadius:2, transition:"width 0.5s" }} />
+              </div>
+            </div>
+            <p style={{ color:"#bbb", fontSize:12, marginTop:14 }}>This window will close automatically once payment is confirmed.</p>
+          </div>
+        )}
+        {stage==="success" && (
+          <div style={{ textAlign:"center" }}>
+            <div style={{ fontSize:60, marginBottom:12 }}>🎉</div>
+            <h3 style={{ color:"#27ae60", fontWeight:800, fontSize:20, marginBottom:8 }}>Payment Successful!</h3>
+            <p style={{ color:"#555", fontSize:14, marginBottom:16 }}>Welcome to NutriPulse {planConfig?.name}! Your premium features are now unlocked.</p>
+            {transactionId && <div style={{ background:C.mist, borderRadius:10, padding:"10px 16px", marginBottom:16 }}><div style={{ color:"#888", fontSize:12 }}>M-Pesa Transaction ID</div><div style={{ color:C.forest, fontWeight:800, fontSize:15 }}>{transactionId}</div></div>}
+            <div style={{ color:"#aaa", fontSize:12 }}>Redirecting to your dashboard...</div>
+          </div>
+        )}
+        {stage==="error" && (
+          <div style={{ textAlign:"center" }}>
+            <div style={{ fontSize:48, marginBottom:12 }}>😞</div>
+            <h3 style={{ color:C.terra, fontWeight:800, fontSize:18, marginBottom:8 }}>Payment Failed</h3>
+            <div style={{ ...eSty, marginBottom:20, textAlign:"left" }}>{error}</div>
+            <button onClick={() => { setStage("input"); setError(""); }} style={{ ...bPri, width:"100%", textAlign:"center" }}>Try Again</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SubscriptionPage({ user, onUpgrade, onBack }) {
   const [selected, setSelected] = useState("premium");
-  const [loading, setLoading] = useState(false);
+  const [showMpesa, setShowMpesa] = useState(false);
   const [success, setSuccess] = useState(false);
-  const handleSubscribe = async () => {
-    setLoading(true);
-    await new Promise(r => setTimeout(r, 2000));
-    await sendNotification("subscription", { ...user, plan:PLANS[selected].name });
-    setLoading(false); setSuccess(true);
-    setTimeout(() => onUpgrade(selected), 1500);
+
+  const handleProceed = () => {
+    if (selected === "free") { onUpgrade("free"); return; }
+    setShowMpesa(true);
   };
+
+  const handlePaymentSuccess = (plan) => {
+    setShowMpesa(false);
+    setSuccess(true);
+    setTimeout(() => onUpgrade(plan), 2000);
+  };
+
   return (
-    <div style={{ minHeight:"100vh", background:`linear-gradient(135deg, ${C.forest}, ${C.jade})`, padding:"40px 24px" }}>
+    <div style={{ minHeight:"100vh", background:"linear-gradient(135deg, "+C.forest+", "+C.jade+")", padding:"40px 24px" }}>
+      {showMpesa && <MpesaPaymentModal plan={selected} user={user} onSuccess={handlePaymentSuccess} onClose={() => setShowMpesa(false)} />}
       <div style={{ maxWidth:1000, margin:"0 auto" }}>
-        <button onClick={onBack} style={{ background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)", color:C.lime, padding:"8px 16px", borderRadius:20, cursor:"pointer", fontWeight:700, fontSize:13, marginBottom:32 }}>← Back</button>
+        <button onClick={onBack} style={{ background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)", color:C.lime, padding:"8px 16px", borderRadius:20, cursor:"pointer", fontWeight:700, fontSize:13, marginBottom:32 }}>Back</button>
         <div style={{ textAlign:"center", marginBottom:44 }}>
           <div style={{ fontSize:48, marginBottom:12 }}>🌿</div>
-          <h1 style={{ color:C.cream, fontFamily:"'Georgia',serif", fontSize:34, margin:"0 0 10px", fontWeight:800 }}>Choose Your Plan</h1>
+          <h1 style={{ color:C.cream, fontFamily:"Georgia,serif", fontSize:34, margin:"0 0 10px", fontWeight:800 }}>Choose Your Plan</h1>
           <p style={{ color:C.lime, fontSize:15, opacity:0.9 }}>Unlock personalised nutrition, AI counselling and full meal plans</p>
         </div>
-        {success && <div style={{ background:"rgba(126,203,161,0.2)", border:"2px solid #7ecba1", borderRadius:16, padding:24, textAlign:"center", marginBottom:28, color:"#fff" }}><div style={{ fontSize:36, marginBottom:8 }}>🎉</div><div style={{ fontWeight:800, fontSize:18 }}>Welcome to {PLANS[selected].name}!</div></div>}
+        {success && <div style={{ background:"rgba(126,203,161,0.2)", border:"2px solid #7ecba1", borderRadius:16, padding:24, textAlign:"center", marginBottom:28, color:"#fff" }}><div style={{ fontSize:36, marginBottom:8 }}>🎉</div><div style={{ fontWeight:800, fontSize:18 }}>Welcome to {PLANS[selected].name}! Setting up your account...</div></div>}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(210px,1fr))", gap:18, marginBottom:36 }}>
           {Object.entries(PLANS).map(([key, plan]) => (
-            <div key={key} onClick={() => setSelected(key)} style={{ background:selected===key?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.06)", border:selected===key?`2px solid ${plan.color}`:"2px solid rgba(255,255,255,0.1)", borderRadius:18, padding:22, cursor:"pointer", transition:"all 0.2s", position:"relative", transform:selected===key?"translateY(-4px)":"none" }}>
+            <div key={key} onClick={() => setSelected(key)} style={{ background:selected===key?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.06)", border:selected===key?"2px solid "+plan.color:"2px solid rgba(255,255,255,0.1)", borderRadius:18, padding:22, cursor:"pointer", transition:"all 0.2s", position:"relative", transform:selected===key?"translateY(-4px)":"none" }}>
               {plan.popular && <div style={{ position:"absolute", top:-11, left:"50%", transform:"translateX(-50%)", background:C.sand, color:C.forest, padding:"3px 14px", borderRadius:20, fontSize:10, fontWeight:900, whiteSpace:"nowrap" }}>MOST POPULAR</div>}
               <div style={{ fontSize:26, marginBottom:6 }}>{plan.icon}</div>
               <div style={{ color:"#fff", fontWeight:800, fontSize:17, marginBottom:4 }}>{plan.name}</div>
-              <div style={{ color:plan.color, fontWeight:900, fontSize:22, marginBottom:14 }}>{plan.price===0?"FREE":`KES ${plan.priceKES?.toLocaleString()}`}{plan.period&&<span style={{ fontSize:12, fontWeight:400, opacity:0.8 }}>/{plan.period}</span>}</div>
-              {plan.priceUSD && <div style={{ color:"rgba(255,255,255,0.5)", fontSize:11, marginBottom:12 }}>approx. USD ${plan.priceUSD}/{plan.period}</div>}
+              <div style={{ color:plan.color, fontWeight:900, fontSize:22, marginBottom:4 }}>{plan.price===0?"FREE":"KES "+plan.priceKES?.toLocaleString()}{plan.period?"/"+(plan.period):""}</div>
+              {plan.priceUSD && <div style={{ color:"rgba(255,255,255,0.45)", fontSize:11, marginBottom:12 }}>approx. USD ${plan.priceUSD}/{plan.period}</div>}
               <ul style={{ listStyle:"none", padding:0, margin:0 }}>
                 {plan.features.map((f,i) => <li key={i} style={{ color:"rgba(255,255,255,0.85)", fontSize:12, padding:"3px 0", display:"flex", alignItems:"flex-start", gap:6 }}><span style={{ color:plan.color, fontWeight:800, flexShrink:0 }}>v</span>{f}</li>)}
               </ul>
             </div>
           ))}
         </div>
-        {selected!=="free" && (
-          <div style={{ maxWidth:460, margin:"0 auto" }}>
-            <div style={{ background:"rgba(255,255,255,0.08)", borderRadius:14, padding:22, marginBottom:16 }}>
-              <h3 style={{ color:C.lime, margin:"0 0 14px", fontWeight:800, fontSize:15 }}>Payment Options</h3>
-              {[{icon:"📱",label:"M-Pesa",desc:"Pay via M-Pesa Paybill"},{icon:"💳",label:"Card",desc:"Visa / Mastercard"},{icon:"🏦",label:"Bank Transfer",desc:"Direct bank transfer"}].map(p => (
-                <div key={p.label} style={{ display:"flex", alignItems:"center", gap:12, padding:"11px", background:"rgba(255,255,255,0.06)", borderRadius:10, marginBottom:8, cursor:"pointer", border:"1px solid rgba(255,255,255,0.1)" }}>
-                  <span style={{ fontSize:20 }}>{p.icon}</span>
-                  <div><div style={{ color:"#fff", fontWeight:700, fontSize:13 }}>{p.label}</div><div style={{ color:"rgba(255,255,255,0.6)", fontSize:11 }}>{p.desc}</div></div>
-                </div>
-              ))}
-              <div style={{ background:"rgba(126,203,161,0.1)", border:"1px solid rgba(126,203,161,0.3)", borderRadius:10, padding:"10px 14px", marginTop:10, color:C.lime, fontSize:12 }}>Secure payment · Cancel anytime · 7-day free trial</div>
-            </div>
-            <button onClick={handleSubscribe} disabled={loading||success} style={{ width:"100%", padding:"15px", borderRadius:12, border:"none", cursor:loading?"not-allowed":"pointer", background:loading?"#aaa":`linear-gradient(135deg, ${PLANS[selected].color}, ${C.jade})`, color:C.forest, fontWeight:900, fontSize:16 }}>
-              {loading?"Processing...":success?"Done!":`Start ${PLANS[selected].name} — KES ${PLANS[selected].priceKES?.toLocaleString()}/${PLANS[selected].period}`}
-            </button>
-          </div>
-        )}
+        <div style={{ maxWidth:460, margin:"0 auto" }}>
+          {selected!=="free" && <div style={{ background:"rgba(255,255,255,0.08)", borderRadius:14, padding:18, marginBottom:16, display:"flex", alignItems:"center", gap:12 }}><span style={{ fontSize:28 }}>📱</span><div><div style={{ color:"#fff", fontWeight:800, fontSize:14 }}>Pay via M-Pesa</div><div style={{ color:"rgba(255,255,255,0.6)", fontSize:12 }}>STK Push to your phone · Instant activation · Cancel anytime</div></div></div>}
+          <button onClick={handleProceed} style={{ width:"100%", padding:"16px", borderRadius:14, border:"none", cursor:"pointer", background:selected==="free"?C.mint:"linear-gradient(135deg, #4caf50, #2e7d32)", color:selected==="free"?C.forest:"#fff", fontWeight:900, fontSize:17 }}>
+            {selected==="free" ? "Continue with Free Plan" : "Pay KES "+(PLANS[selected]?.priceKES?.toLocaleString())+" with M-Pesa"}
+          </button>
+          {selected!=="free" && <p style={{ color:"rgba(255,255,255,0.5)", fontSize:11, textAlign:"center", marginTop:12 }}>Secured by Safaricom · 7-day free trial · Cancel anytime</p>}
+        </div>
       </div>
     </div>
   );
@@ -364,7 +499,7 @@ function ChatBot({ plan, setPage }) {
     const nc = msgCount+1; setMsgCount(nc); localStorage.setItem("np_msg_count", nc);
     try {
       const apiMsgs = updated.map(m => ({ role:m.role==="assistant"?"assistant":"user", content:m.content }));
-      const reply = await callNutriBot(apiMsgs);
+      const reply = await callNutriBot(apiMsgs, null, plan);
       setMessages(prev => [...prev, { role:"assistant", content:reply }]);
     } catch { setMessages(prev => [...prev, { role:"assistant", content:"Connection issue. Please try again." }]); }
     finally { setLoading(false); }
