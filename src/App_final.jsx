@@ -1297,22 +1297,27 @@ function AuthScreen({ onAuth }) {
   const [tab, setTab] = useState("login");
   const [ld, setLd] = useState({ email:"", password:"" });
   const [sd, setSd] = useState({ name:"", email:"", phone:"", password:"", confirm:"" });
-  const [error, setError] = useState(""); const [success, setSuccess] = useState("");
-  const [showPass, setShowPass] = useState(false); const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     setError(""); setSuccess("");
-    if (!ld.email||!ld.password) { setError("Please fill in all fields."); return; }
+    if (!ld.email || !ld.password) { setError("Please fill in all fields."); return; }
     setLoading(true);
     const { data, error:err } = await supabase.auth.signIn({ email:ld.email, password:ld.password });
     if (err) {
-      if (ld.email==="demo@nutripulse.com"&&ld.password==="demo1234") {
+      if (ld.email==="demo@nutripulse.com" && ld.password==="demo1234") {
         const demo = { name:"Demo User", email:"demo@nutripulse.com", conditions:["diabetes2","hypertension"], condition:"diabetes2", height:1.68, weight:"72", age:"34" };
-        localStorage.setItem("np_user", JSON.stringify(demo)); localStorage.setItem("np_token","demo");
+        localStorage.setItem("np_user", JSON.stringify(demo));
+        localStorage.setItem("np_token","demo");
         setSuccess("Welcome back! Redirecting...");
         await sendNotification("login", demo);
         setTimeout(() => onAuth(demo, false), 800);
-      } else { setError("Incorrect credentials. Try demo@nutripulse.com / demo1234"); }
+      } else {
+        setError("Incorrect credentials. Try demo@nutripulse.com / demo1234");
+      }
     } else {
       setSuccess("Welcome back! Redirecting...");
       await sendNotification("login", data.user);
@@ -1326,121 +1331,282 @@ function AuthScreen({ onAuth }) {
     const { name, email, phone, password, confirm } = sd;
     if (!name||!email||!password||!confirm) { setError("Please fill in all required fields."); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError("Please enter a valid email."); return; }
-    if (password.length<6) { setError("Password must be at least 6 characters."); return; }
-    if (password!==confirm) { setError("Passwords do not match."); return; }
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (password !== confirm) { setError("Passwords do not match."); return; }
     setLoading(true);
     const { error:err } = await supabase.auth.signUp({ email, password, options:{ data:{ name, phone, conditions:["healthy"], condition:"healthy", height:1.65, weight:"65" } } });
-    if (err) { setError(err.message||"Signup failed. Please try again."); }
-    else { setSuccess("Account created! Setting up your profile..."); await sendNotification("signup", { name, email, phone }); setTimeout(() => onAuth({ name, email, phone, conditions:["healthy"], condition:"healthy", height:1.65, weight:"65" }, true), 800); }
+    if (err) { setError(err.message || "Signup failed. Please try again."); }
+    else {
+      setSuccess("Account created! Setting up your profile...");
+      await sendNotification("signup", { name, email, phone });
+      setTimeout(() => onAuth({ name, email, phone, conditions:["healthy"], condition:"healthy", height:1.65, weight:"65" }, true), 800);
+    }
     setLoading(false);
   };
 
   const pwS = pw => pw.length>=12?4:pw.length>=8?3:pw.length>=6?2:pw.length>0?1:0;
   const pwC = s => s>=3?C.mint:s===2?C.sand:C.terra;
 
+  // ── Shared input style with larger touch targets on mobile
+  const mInput = { ...iSty, padding:isMobile?"14px 16px":"12px 16px", fontSize:isMobile?16:15, borderRadius:14 };
+
   return (
-    <div style={{ minHeight:"100vh", width:"100%", maxWidth:"100vw", background:`linear-gradient(145deg, ${C.forest} 0%, #0d1f12 45%, ${C.jade} 100%)`, display:"flex", alignItems:isMobile?"flex-start":"center", justifyContent:"center", padding:isMobile?0:24, position:"relative", overflowX:"hidden", overflowY:"auto" }}>
+    <div style={{ minHeight:"100vh", width:"100%", maxWidth:"100vw", overflowX:"hidden", overflowY:"auto", background:isMobile?`linear-gradient(160deg, ${C.forest} 0%, #0d2218 100%)`:`linear-gradient(145deg, ${C.forest} 0%, #0d1f12 45%, ${C.jade} 100%)`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:isMobile?0:24, position:"relative" }}>
       <style>{`
-        @keyframes floatL{0%,100%{transform:translateY(0) rotate(var(--r))} 50%{transform:translateY(-14px) rotate(var(--r))}}
-        @keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes fadeInUp2{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
         @keyframes spin2{to{transform:rotate(360deg)}}
-        .af:focus{border-color:${C.mint}!important;box-shadow:0 0 0 3px rgba(45,158,107,0.2)!important;}
-        .abtn:hover{filter:brightness(1.08);} .abtn{transition:all 0.2s;}
-        .tabn{transition:all 0.2s;}
+        @keyframes shimmer{0%{background-position:-200% center}100%{background-position:200% center}}
+        .af{transition:border-color 0.2s,box-shadow 0.2s;}
+        .af:focus{border-color:${C.mint}!important;box-shadow:0 0 0 3px rgba(45,158,107,0.18)!important;outline:none!important;}
+        .auth-btn{transition:all 0.2s;touch-action:manipulation;}
+        .auth-btn:active{transform:scale(0.98);}
+        .tab-btn{transition:all 0.2s;touch-action:manipulation;border:none;cursor:pointer;}
       `}</style>
-      {/* Decorative leaves — hidden on mobile to prevent overflow */}
-      {!isMobile && [{t:"7%",l:"5%",s:70,o:0.09,r:-20,d:3.5},{t:"72%",l:"2%",s:100,o:0.06,r:30,d:4.2},{t:"14%",r:"3%",s:80,o:0.08,r2:15,d:5},{t:"80%",r:"4%",s:55,o:0.1,r2:-35,d:3.8}].map((l,i)=>(
-        <div key={i} style={{ position:"absolute",fontSize:l.s,top:l.t,left:l.l,right:l.r,opacity:l.o,userSelect:"none",pointerEvents:"none",animation:`floatL ${l.d}s ease-in-out infinite`,"--r":`${l.r||l.r2||0}deg`,transform:`rotate(${l.r||l.r2||0}deg)` }}>🌿</div>
-      ))}
 
-      <div style={{ display:"flex", flexDirection:isMobile?"column":"row", width:"100%", maxWidth:isMobile?"100%":1000, minHeight:isMobile?"100vh":"auto", borderRadius:isMobile?0:28, overflow:"visible", boxShadow:isMobile?"none":"0 40px 120px rgba(0,0,0,0.55)", animation:"fadeInUp 0.5s ease" }}>
-        {/* Left — hidden on mobile */}
-        {!isMobile && <div style={{ flex:1, background:`linear-gradient(160deg, ${C.jade}, ${C.forest})`, padding:"54px 44px", color:"#fff", display:"flex", flexDirection:"column", justifyContent:"space-between", minWidth:280 }}>
-          <div>
-            <div style={{ display:"flex", alignItems:"center", gap:11, marginBottom:44 }}>
-              <div style={{ width:44, height:44, borderRadius:"50%", background:`linear-gradient(135deg, ${C.mint}, ${C.lime})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, boxShadow:"0 4px 16px rgba(45,158,107,0.4)" }}>🌿</div>
-              <span style={{ fontFamily:"Georgia,serif", fontSize:26, fontWeight:900 }}>Nutri<span style={{ color:C.lime }}>Pulse</span></span>
+      {/* ── Subtle background leaves — desktop only ── */}
+      {!isMobile && (
+        <>
+          <div style={{ position:"fixed", top:"-10%", right:"-5%", fontSize:180, opacity:0.04, userSelect:"none", pointerEvents:"none", transform:"rotate(20deg)" }}>🌿</div>
+          <div style={{ position:"fixed", bottom:"-5%", left:"-3%", fontSize:140, opacity:0.04, userSelect:"none", pointerEvents:"none", transform:"rotate(-15deg)" }}>🌿</div>
+        </>
+      )}
+
+      {/* ══════════════════════════════════════
+          MOBILE LAYOUT — clean single column
+      ══════════════════════════════════════ */}
+      {isMobile ? (
+        <div style={{ width:"100%", minHeight:"100vh", display:"flex", flexDirection:"column" }}>
+
+          {/* Top green header band */}
+          <div style={{ background:`linear-gradient(160deg, ${C.jade}, ${C.forest})`, padding:"36px 24px 48px", position:"relative", overflow:"hidden" }}>
+            {/* Subtle leaf bg */}
+            <div style={{ position:"absolute", right:-20, top:-20, fontSize:120, opacity:0.06, userSelect:"none", pointerEvents:"none", transform:"rotate(20deg)" }}>🌿</div>
+            {/* Brand */}
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:20, position:"relative", zIndex:1 }}>
+              <div style={{ width:40, height:40, borderRadius:"50%", background:`linear-gradient(135deg, ${C.mint}, ${C.lime})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, boxShadow:"0 0 0 3px rgba(109,207,158,0.25)" }}>🌿</div>
+              <span style={{ fontFamily:"Georgia,serif", fontSize:22, fontWeight:900, color:"#fff" }}>Nutri<span style={{ color:C.lime }}>Pulse</span></span>
             </div>
-            <h2 style={{ fontSize:30, fontFamily:"Georgia,serif", margin:"0 0 14px", lineHeight:1.25, fontWeight:800 }}>Your health journey starts here. 🌱</h2>
-            <p style={{ color:C.lime, lineHeight:1.85, fontSize:14, opacity:0.9 }}>Africa's most comprehensive nutrition platform — personalised meal plans, AI health guidance, and community support for over 30 health conditions.</p>
-          </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:14, marginTop:36 }}>
-            {[["🌍","Pan-African Nutrition","Foods from East, West, Southern & Horn of Africa"],["🤖","AI Health Assistant","Personalised advice for your specific condition"],["📚","Health Education","Understand root causes, not just symptoms"],["🎯","Multi-condition Support","Manage multiple health conditions simultaneously"]].map(([icon,title,desc]) => (
-              <div key={title} style={{ display:"flex", alignItems:"center", gap:12 }}>
-                <div style={{ width:38, height:38, borderRadius:10, background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.12)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>{icon}</div>
-                <div><div style={{ fontWeight:800, fontSize:13 }}>{title}</div><div style={{ fontSize:11, opacity:0.7 }}>{desc}</div></div>
-              </div>
-            ))}
-          </div>
-        </div>}
-
-        {/* Right */}
-        <div style={{ flex:1, background:"#fff", padding:isMobile?"24px 20px 40px":"44px 40px", overflowY:"auto", width:"100%", minHeight:isMobile?"100vh":"auto", maxHeight:isMobile?"none":"92vh" }}>
-          <div style={{ display:"flex", background:"#f3f3f3", borderRadius:13, padding:4, marginBottom:26 }}>
-            {["login","signup"].map(t => <button key={t} className="tabn" onClick={() => { setTab(t); setError(""); setSuccess(""); }} style={{ flex:1, padding:"10px", borderRadius:10, border:"none", cursor:"pointer", fontWeight:800, fontSize:14, background:tab===t?"#fff":"transparent", color:tab===t?C.forest:"#aaa", boxShadow:tab===t?"0 2px 8px rgba(0,0,0,0.1)":"none" }}>{t==="login"?"Sign In":"Create Account"}</button>)}
+            {/* Tagline */}
+            <h1 style={{ color:"#fff", fontFamily:"Georgia,serif", fontSize:26, fontWeight:800, lineHeight:1.2, margin:"0 0 8px", position:"relative", zIndex:1 }}>Your health journey<br/>starts here. 🌱</h1>
+            <p style={{ color:"rgba(200,236,214,0.8)", fontSize:13, lineHeight:1.6, margin:0, position:"relative", zIndex:1 }}>Africa's nutrition platform for 30+ health conditions</p>
           </div>
 
-          {isMobile && (
-            <div style={{ textAlign:"center", marginBottom:22 }}>
-              <div style={{ display:"inline-flex", alignItems:"center", gap:9 }}>
-                <div style={{ width:36, height:36, borderRadius:"50%", background:`linear-gradient(135deg, ${C.mint}, ${C.lime})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>🌿</div>
-                <span style={{ fontFamily:"Georgia,serif", fontSize:20, fontWeight:900, color:C.forest }}>Nutri<span style={{ color:C.mint }}>Pulse</span></span>
-              </div>
-              <div style={{ fontSize:11, color:"#bbb", marginTop:5, letterSpacing:1 }}>Africa's Nutrition Platform</div>
+          {/* White form card — floats up slightly over the green band */}
+          <div style={{ flex:1, background:"#fff", borderRadius:"24px 24px 0 0", marginTop:-20, padding:"28px 20px 40px", position:"relative", zIndex:2 }}>
+
+            {/* Tab switcher */}
+            <div style={{ display:"flex", background:"#f2f2f2", borderRadius:14, padding:4, marginBottom:24 }}>
+              {[["login","Sign In"],["signup","Create Account"]].map(([key,label]) => (
+                <button key={key} className="tab-btn" onClick={() => { setTab(key); setError(""); setSuccess(""); }}
+                  style={{ flex:1, padding:"12px 8px", borderRadius:11, fontWeight:700, fontSize:14, background:tab===key?"#fff":"transparent", color:tab===key?C.forest:"#aaa", boxShadow:tab===key?"0 2px 8px rgba(0,0,0,0.1)":"none" }}>
+                  {label}
+                </button>
+              ))}
             </div>
-          )}
-          {tab==="login" ? (
+
+            {/* ── LOGIN ── */}
+            {tab==="login" && (
+              <div style={{ animation:"fadeInUp2 0.3s ease" }}>
+                <h2 style={{ color:C.forest, fontFamily:"Georgia,serif", fontSize:22, margin:"0 0 4px", fontWeight:800 }}>Welcome back 👋</h2>
+                <p style={{ color:"#aaa", fontSize:13, marginBottom:22 }}>Sign in to continue your health journey</p>
+
+                <label style={{ ...lSty, fontSize:14 }}>Email address</label>
+                <input className="af" type="email" inputMode="email" autoComplete="email" value={ld.email}
+                  onChange={e => setLd(p => ({...p,email:e.target.value}))}
+                  placeholder="you@email.com"
+                  style={{ ...mInput, marginBottom:14 }} />
+
+                <label style={{ ...lSty, fontSize:14 }}>Password</label>
+                <div style={{ position:"relative", marginBottom:8 }}>
+                  <input className="af" type={showPass?"text":"password"} autoComplete="current-password" value={ld.password}
+                    onChange={e => setLd(p => ({...p,password:e.target.value}))}
+                    onKeyDown={e => e.key==="Enter" && handleLogin()}
+                    placeholder="Your password"
+                    style={{ ...mInput, paddingRight:50 }} />
+                  <button onClick={() => setShowPass(p => !p)}
+                    style={{ position:"absolute", right:14, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", fontSize:18, color:"#bbb", minHeight:44, minWidth:44, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    {showPass ? "🙈" : "👁️"}
+                  </button>
+                </div>
+
+                {error && <div style={{ ...eSty, marginBottom:14, fontSize:13 }}>⚠️ {error}</div>}
+                {success && <div style={{ ...okSty, marginBottom:14, fontSize:13 }}>✅ {success}</div>}
+
+                <button className="auth-btn abtn" onClick={handleLogin} disabled={loading}
+                  style={{ width:"100%", padding:"16px", borderRadius:14, border:"none", background:loading?"#aaa":`linear-gradient(135deg, ${C.mint}, ${C.jade})`, color:"#fff", fontWeight:800, fontSize:16, marginTop:8, boxShadow:loading?"none":`0 6px 20px rgba(45,158,107,0.35)`, opacity:loading?0.7:1 }}>
+                  {loading ? <span style={{ display:"inline-block", animation:"spin2 0.8s linear infinite" }}>⟳</span> : "Sign In →"}
+                </button>
+
+                <div style={{ margin:"20px 0", display:"flex", alignItems:"center", gap:10 }}>
+                  <div style={{ flex:1, height:1, background:"#f0f0f0" }} />
+                  <span style={{ color:"#ccc", fontSize:12 }}>or try demo</span>
+                  <div style={{ flex:1, height:1, background:"#f0f0f0" }} />
+                </div>
+
+                <button className="auth-btn" onClick={() => { setLd({ email:"demo@nutripulse.com", password:"demo1234" }); }}
+                  style={{ width:"100%", padding:"14px", borderRadius:14, border:`1.5px dashed ${C.lime}`, background:"rgba(45,158,107,0.04)", color:C.jade, fontWeight:700, fontSize:14 }}>
+                  🌿 Use Demo Account
+                </button>
+                <p style={{ textAlign:"center", color:"#ccc", fontSize:11, marginTop:10 }}>demo@nutripulse.com · demo1234</p>
+              </div>
+            )}
+
+            {/* ── SIGN UP ── */}
+            {tab==="signup" && (
+              <div style={{ animation:"fadeInUp2 0.3s ease" }}>
+                <h2 style={{ color:C.forest, fontFamily:"Georgia,serif", fontSize:22, margin:"0 0 4px", fontWeight:800 }}>Create your account ✨</h2>
+                <p style={{ color:"#aaa", fontSize:13, marginBottom:22 }}>Free · 2 minutes · No payment needed</p>
+
+                <label style={{ ...lSty, fontSize:14 }}>Full Name *</label>
+                <input className="af" autoComplete="name" value={sd.name}
+                  onChange={e => setSd(p => ({...p,name:e.target.value}))}
+                  placeholder="e.g. Jane Wanjiku"
+                  style={{ ...mInput, marginBottom:14 }} />
+
+                <label style={{ ...lSty, fontSize:14 }}>Email *</label>
+                <input className="af" type="email" inputMode="email" autoComplete="email" value={sd.email}
+                  onChange={e => setSd(p => ({...p,email:e.target.value}))}
+                  placeholder="you@email.com"
+                  style={{ ...mInput, marginBottom:14 }} />
+
+                <label style={{ ...lSty, fontSize:14 }}>Phone <span style={{ fontWeight:400, color:"#bbb" }}>(optional)</span></label>
+                <input className="af" type="tel" inputMode="tel" autoComplete="tel" value={sd.phone}
+                  onChange={e => setSd(p => ({...p,phone:e.target.value}))}
+                  placeholder="+254 7XX XXX XXX"
+                  style={{ ...mInput, marginBottom:14 }} />
+
+                <label style={{ ...lSty, fontSize:14 }}>Password *</label>
+                <div style={{ position:"relative", marginBottom:14 }}>
+                  <input className="af" type={showPass?"text":"password"} autoComplete="new-password" value={sd.password}
+                    onChange={e => setSd(p => ({...p,password:e.target.value}))}
+                    placeholder="Minimum 6 characters"
+                    style={{ ...mInput, paddingRight:50 }} />
+                  <button onClick={() => setShowPass(p => !p)}
+                    style={{ position:"absolute", right:14, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", fontSize:18, color:"#bbb", minHeight:44, minWidth:44, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    {showPass ? "🙈" : "👁️"}
+                  </button>
+                </div>
+
+                {sd.password && (
+                  <div style={{ marginBottom:14 }}>
+                    <div style={{ display:"flex", gap:4, marginBottom:4 }}>
+                      {[1,2,3,4].map(i => { const s=pwS(sd.password); return <div key={i} style={{ flex:1, height:4, borderRadius:2, background:i<=s?pwC(s):"#e8e8e8", transition:"background 0.3s" }} />; })}
+                    </div>
+                    <span style={{ fontSize:11, color:"#bbb" }}>{["","Too short","Weak","Good","Strong"][pwS(sd.password)]}</span>
+                  </div>
+                )}
+
+                <label style={{ ...lSty, fontSize:14 }}>Confirm Password *</label>
+                <input className="af" type="password" autoComplete="new-password" value={sd.confirm}
+                  onChange={e => setSd(p => ({...p,confirm:e.target.value}))}
+                  placeholder="Repeat your password"
+                  style={{ ...mInput, marginBottom:16, borderColor:sd.confirm && sd.confirm!==sd.password?"#e74c3c":undefined }} />
+                {sd.confirm && sd.confirm !== sd.password && <p style={{ color:"#e74c3c", fontSize:12, marginTop:-12, marginBottom:12 }}>Passwords don't match</p>}
+
+                {error && <div style={{ ...eSty, marginBottom:14, fontSize:13 }}>⚠️ {error}</div>}
+                {success && <div style={{ ...okSty, marginBottom:14, fontSize:13 }}>✅ {success}</div>}
+
+                <button className="auth-btn abtn" onClick={handleSignup} disabled={loading}
+                  style={{ width:"100%", padding:"16px", borderRadius:14, border:"none", background:loading?"#aaa":`linear-gradient(135deg, ${C.mint}, ${C.jade})`, color:"#fff", fontWeight:800, fontSize:16, boxShadow:loading?"none":`0 6px 20px rgba(45,158,107,0.35)`, opacity:loading?0.7:1 }}>
+                  {loading ? <span style={{ display:"inline-block", animation:"spin2 0.8s linear infinite" }}>⟳</span> : "Create Account & Continue →"}
+                </button>
+
+                <p style={{ textAlign:"center", color:"#bbb", fontSize:11, marginTop:14, lineHeight:1.5 }}>
+                  By signing up you agree to use NutriPulse for your health journey. Always consult a doctor for medical advice.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+      ) : (
+      /* ══════════════════════════════════════
+         DESKTOP LAYOUT — side by side panels
+      ══════════════════════════════════════ */
+        <div style={{ display:"flex", width:"100%", maxWidth:960, borderRadius:28, overflow:"hidden", boxShadow:"0 40px 120px rgba(0,0,0,0.5)", animation:"fadeInUp2 0.5s ease" }}>
+          {/* Left panel */}
+          <div style={{ flex:1, background:`linear-gradient(160deg, ${C.jade}, ${C.forest})`, padding:"52px 44px", color:"#fff", display:"flex", flexDirection:"column", justifyContent:"space-between", minWidth:280 }}>
             <div>
-              {isMobile && <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:20, paddingBottom:16, borderBottom:"1px solid #f0f0f0" }}><div style={{ width:34, height:34, borderRadius:"50%", background:`linear-gradient(135deg, ${C.mint}, ${C.lime})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17 }}>🌿</div><span style={{ fontFamily:"Georgia,serif", fontSize:18, fontWeight:800, color:C.forest }}>Nutri<span style={{ color:C.lime }}>Pulse</span></span></div>}
-              <h3 style={{ color:C.forest, fontFamily:"Georgia,serif", fontSize:22, margin:"0 0 5px", fontWeight:800 }}>Welcome back 👋</h3>
-              <p style={{ color:"#aaa", fontSize:12, marginBottom:20 }}>Sign in to your NutriPulse account</p>
-              <label style={lSty}>Email</label>
-              <input className="af" type="email" value={ld.email} onChange={e => setLd(p => ({...p,email:e.target.value}))} placeholder="you@email.com" style={{ ...iSty, marginBottom:12 }} />
-              <label style={lSty}>Password</label>
-              <div style={{ position:"relative", marginBottom:18 }}>
-                <input className="af" type={showPass?"text":"password"} value={ld.password} onChange={e => setLd(p => ({...p,password:e.target.value}))} onKeyDown={e => e.key==="Enter"&&handleLogin()} style={{ ...iSty, paddingRight:44 }} />
-                <button onClick={() => setShowPass(p => !p)} style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", fontSize:15, color:"#bbb" }}>{showPass?"🙈":"👁️"}</button>
+              <div style={{ display:"flex", alignItems:"center", gap:11, marginBottom:44 }}>
+                <div style={{ width:44, height:44, borderRadius:"50%", background:`linear-gradient(135deg, ${C.mint}, ${C.lime})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>🌿</div>
+                <span style={{ fontFamily:"Georgia,serif", fontSize:26, fontWeight:900 }}>Nutri<span style={{ color:C.lime }}>Pulse</span></span>
               </div>
-              {error && <div style={{ ...eSty, marginBottom:12 }}>⚠️ {error}</div>}
-              {success && <div style={{ ...okSty, marginBottom:12 }}>✅ {success}</div>}
-              <button className="abtn" onClick={handleLogin} disabled={loading} style={{ ...bPri, width:"100%", textAlign:"center", opacity:loading?0.7:1 }}>
-                {loading?<span style={{ display:"inline-block", animation:"spin2 0.8s linear infinite" }}>⟳</span>:"Sign In →"}
-              </button>
-              <p style={{ textAlign:"center", color:"#ccc", fontSize:11, marginTop:14 }}>Demo: demo@nutripulse.com / demo1234</p>
+              <h2 style={{ fontSize:30, fontFamily:"Georgia,serif", margin:"0 0 14px", lineHeight:1.25, fontWeight:800 }}>Your health journey starts here. 🌱</h2>
+              <p style={{ color:C.lime, lineHeight:1.85, fontSize:14, opacity:0.9 }}>Africa's most comprehensive nutrition platform — personalised meal plans, AI health guidance, and community support for over 30 health conditions.</p>
             </div>
-          ) : (
-            <div>
-              <h3 style={{ color:C.forest, fontFamily:"Georgia,serif", fontSize:22, margin:"0 0 5px", fontWeight:800 }}>Create your account ✨</h3>
-              <p style={{ color:"#aaa", fontSize:12, marginBottom:18 }}>Free · Takes 2 minutes · No payment required</p>
-              <label style={lSty}>Full Name *</label>
-              <input className="af" value={sd.name} onChange={e => setSd(p => ({...p,name:e.target.value}))} placeholder="e.g. Jane Wanjiku" style={{ ...iSty, marginBottom:11 }} />
-              <label style={lSty}>Email *</label>
-              <input className="af" type="email" value={sd.email} onChange={e => setSd(p => ({...p,email:e.target.value}))} placeholder="you@email.com" style={{ ...iSty, marginBottom:11 }} />
-              <label style={lSty}>Phone (optional)</label>
-              <input className="af" value={sd.phone} onChange={e => setSd(p => ({...p,phone:e.target.value}))} placeholder="+254 7XX XXX XXX" style={{ ...iSty, marginBottom:11 }} />
-              <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 1fr", gap:10, marginBottom:11 }}>
-                <div>
-                  <label style={lSty}>Password *</label>
-                  <div style={{ position:"relative" }}>
-                    <input className="af" type={showPass?"text":"password"} value={sd.password} onChange={e => setSd(p => ({...p,password:e.target.value}))} placeholder="Min. 6 chars" style={{ ...iSty, paddingRight:38 }} />
-                    <button onClick={() => setShowPass(p => !p)} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", fontSize:13, color:"#bbb" }}>{showPass?"🙈":"👁️"}</button>
+            <div style={{ display:"flex", flexDirection:"column", gap:14, marginTop:36 }}>
+              {[["🌍","Pan-African Nutrition","Foods from East, West, Southern & Horn of Africa"],["🤖","AI Health Assistant","Personalised advice for your specific condition"],["📚","Health Education","Understand root causes, not just symptoms"],["🎯","Multi-condition Support","Manage multiple health conditions simultaneously"]].map(([icon,title,desc]) => (
+                <div key={title} style={{ display:"flex", alignItems:"center", gap:12 }}>
+                  <div style={{ width:38, height:38, borderRadius:10, background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.12)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>{icon}</div>
+                  <div><div style={{ fontWeight:800, fontSize:13 }}>{title}</div><div style={{ fontSize:11, opacity:0.7 }}>{desc}</div></div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right panel */}
+          <div style={{ flex:1.1, background:"#fff", padding:"44px 40px", overflowY:"auto", maxHeight:"92vh" }}>
+            <div style={{ display:"flex", background:"#f3f3f3", borderRadius:13, padding:4, marginBottom:26 }}>
+              {[["login","Sign In"],["signup","Create Account"]].map(([key,label]) => (
+                <button key={key} className="tab-btn" onClick={() => { setTab(key); setError(""); setSuccess(""); }}
+                  style={{ flex:1, padding:"10px", borderRadius:10, fontWeight:800, fontSize:14, background:tab===key?"#fff":"transparent", color:tab===key?C.forest:"#aaa", boxShadow:tab===key?"0 2px 8px rgba(0,0,0,0.1)":"none" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {tab==="login" ? (
+              <div>
+                <h3 style={{ color:C.forest, fontFamily:"Georgia,serif", fontSize:22, margin:"0 0 5px", fontWeight:800 }}>Welcome back 👋</h3>
+                <p style={{ color:"#aaa", fontSize:12, marginBottom:20 }}>Sign in to your NutriPulse account</p>
+                <label style={lSty}>Email</label>
+                <input className="af" type="email" value={ld.email} onChange={e => setLd(p => ({...p,email:e.target.value}))} placeholder="you@email.com" style={{ ...iSty, marginBottom:12 }} />
+                <label style={lSty}>Password</label>
+                <div style={{ position:"relative", marginBottom:18 }}>
+                  <input className="af" type={showPass?"text":"password"} value={ld.password} onChange={e => setLd(p => ({...p,password:e.target.value}))} onKeyDown={e => e.key==="Enter"&&handleLogin()} style={{ ...iSty, paddingRight:44 }} />
+                  <button onClick={() => setShowPass(p => !p)} style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", fontSize:15, color:"#bbb" }}>{showPass?"🙈":"👁️"}</button>
+                </div>
+                {error && <div style={{ ...eSty, marginBottom:12 }}>⚠️ {error}</div>}
+                {success && <div style={{ ...okSty, marginBottom:12 }}>✅ {success}</div>}
+                <button className="auth-btn abtn" onClick={handleLogin} disabled={loading} style={{ ...bPri, width:"100%", textAlign:"center", opacity:loading?0.7:1 }}>
+                  {loading?<span style={{ display:"inline-block", animation:"spin2 0.8s linear infinite" }}>⟳</span>:"Sign In →"}
+                </button>
+                <p style={{ textAlign:"center", color:"#ccc", fontSize:11, marginTop:14 }}>Demo: demo@nutripulse.com / demo1234</p>
+              </div>
+            ) : (
+              <div>
+                <h3 style={{ color:C.forest, fontFamily:"Georgia,serif", fontSize:22, margin:"0 0 5px", fontWeight:800 }}>Create your account ✨</h3>
+                <p style={{ color:"#aaa", fontSize:12, marginBottom:18 }}>Free · Takes 2 minutes · No payment required</p>
+                <label style={lSty}>Full Name *</label>
+                <input className="af" value={sd.name} onChange={e => setSd(p => ({...p,name:e.target.value}))} placeholder="e.g. Jane Wanjiku" style={{ ...iSty, marginBottom:11 }} />
+                <label style={lSty}>Email *</label>
+                <input className="af" type="email" value={sd.email} onChange={e => setSd(p => ({...p,email:e.target.value}))} placeholder="you@email.com" style={{ ...iSty, marginBottom:11 }} />
+                <label style={lSty}>Phone (optional)</label>
+                <input className="af" value={sd.phone} onChange={e => setSd(p => ({...p,phone:e.target.value}))} placeholder="+254 7XX XXX XXX" style={{ ...iSty, marginBottom:11 }} />
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:11 }}>
+                  <div>
+                    <label style={lSty}>Password *</label>
+                    <div style={{ position:"relative" }}>
+                      <input className="af" type={showPass?"text":"password"} value={sd.password} onChange={e => setSd(p => ({...p,password:e.target.value}))} placeholder="Min. 6 chars" style={{ ...iSty, paddingRight:38 }} />
+                      <button onClick={() => setShowPass(p => !p)} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", fontSize:13, color:"#bbb" }}>{showPass?"🙈":"👁️"}</button>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={lSty}>Confirm *</label>
+                    <input className="af" type="password" value={sd.confirm} onChange={e => setSd(p => ({...p,confirm:e.target.value}))} placeholder="Repeat" style={iSty} />
                   </div>
                 </div>
-                <div>
-                  <label style={lSty}>Confirm *</label>
-                  <input className="af" type="password" value={sd.confirm} onChange={e => setSd(p => ({...p,confirm:e.target.value}))} placeholder="Repeat" style={iSty} />
-                </div>
+                {sd.password && <div style={{ marginBottom:10 }}><div style={{ display:"flex", gap:3 }}>{[1,2,3,4].map(i => { const s=pwS(sd.password); return <div key={i} style={{ flex:1, height:3, borderRadius:2, background:i<=s?pwC(s):"#e8e8e8" }} />; })}</div><span style={{ fontSize:10, color:"#bbb" }}>{["","Too short","Weak","Good","Strong"][pwS(sd.password)]}</span></div>}
+                {error && <div style={{ ...eSty, marginBottom:11 }}>⚠️ {error}</div>}
+                {success && <div style={{ ...okSty, marginBottom:11 }}>✅ {success}</div>}
+                <button className="auth-btn abtn" onClick={handleSignup} disabled={loading} style={{ ...bPri, width:"100%", textAlign:"center", opacity:loading?0.7:1 }}>
+                  {loading?<span style={{ display:"inline-block", animation:"spin2 0.8s linear infinite" }}>⟳</span>:"Create Account & Continue →"}
+                </button>
               </div>
-              {sd.password && <div style={{ marginBottom:10 }}><div style={{ display:"flex", gap:3 }}>{[1,2,3,4].map(i => { const s=pwS(sd.password); return <div key={i} style={{ flex:1, height:3, borderRadius:2, background:i<=s?pwC(s):"#e8e8e8" }} />; })}</div><span style={{ fontSize:10, color:"#bbb" }}>{["","Too short","Weak","Good","Strong"][pwS(sd.password)]}</span></div>}
-              {error && <div style={{ ...eSty, marginBottom:11 }}>⚠️ {error}</div>}
-              {success && <div style={{ ...okSty, marginBottom:11 }}>✅ {success}</div>}
-              <button className="abtn" onClick={handleSignup} disabled={loading} style={{ ...bPri, width:"100%", textAlign:"center", opacity:loading?0.7:1 }}>
-                {loading?<span style={{ display:"inline-block", animation:"spin2 0.8s linear infinite" }}>⟳</span>:"Create Account & Continue →"}
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -1529,7 +1695,7 @@ export default function App() {
       )}
 
       <footer style={{ textAlign:"center", padding:"24px", color:"#bbb", fontSize:12, borderTop:`1px solid ${C.mist}`, marginTop:40, fontFamily:"system-ui,sans-serif", display:isMobileApp?"none":"block" }}>
-        NutriPulse © 2025 · AI Nutrition for Africa
+        NutriPulse © 2025 ·  Nutrition for Africa
       </footer>
     </div>
   );
